@@ -70,7 +70,7 @@ If `sources.audio_separate` is false, skip this — the camera audio is the audi
 Otherwise, find the offset by cross-correlation and mux:
 
 ```bash
-python3 engine/sync_audio.py --iphone "<camera.mov>" --lav "<audio.wav>" \
+python3 engine/sync_audio.py --camera "<camera.mov>" --mic "<audio.wav>" \
   --approx <sync_hint_sec> --window 30 --duration 30
 ```
 

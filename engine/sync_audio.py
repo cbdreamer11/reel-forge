@@ -4,7 +4,7 @@ sync_audio.py — Cross-correlate iPhone .mov audio vs Lavalier .WAV to find
 the precise offset to align the lavalier track over the camera audio.
 
 Usage:
-  python3 sync_audio.py --camera IPHONE.mov --lav LAV.wav --approx 1.0 \
+  python3 sync_audio.py --camera IPHONE.mov --mic LAV.wav --approx 1.0 \
       [--duration 30] [--sr 8000] [--out offset.json]
 
 Output: JSON `{"offset": 1.234, "confidence": 0.92}` (offset = seconds the
@@ -86,7 +86,7 @@ def find_offset(camera_audio, mic_audio, sr, search_window_sec):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--camera", required=True, help="Camera file path (its own audio track)")
-    p.add_argument("--lav", required=True, help="External recorder file path")
+    p.add_argument("--mic", required=True, help="External recorder file path")
     p.add_argument("--approx", type=float, default=0.0,
                    help="Approximate offset (sec) to start search around")
     p.add_argument("--duration", type=float, default=30.0,
@@ -100,7 +100,7 @@ def main():
     start = max(0.0, args.approx - args.window / 2.0)
 
     iph = extract(args.iphone, sr=args.sr, dur=args.duration, start=start)
-    lav = extract(args.lav, sr=args.sr, dur=args.duration, start=start)
+    lav = extract(args.mic, sr=args.sr, dur=args.duration, start=start)
 
     offset_local, conf = find_offset(iph, lav, args.sr, args.window)
     # offset_local is measured within the extracted windows (both started at `start`)

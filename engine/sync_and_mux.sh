@@ -10,7 +10,7 @@ IPHONE="$1"; LAV="$2"; APPROX="$3"; OUT="$4"
 
 echo "[sync] cross-correlating..."
 OFFSET_JSON=$(python3 "$HERE/sync_audio.py" \
-  --camera "$IPHONE" --lav "$LAV" --approx "$APPROX" --window 30 --duration 30)
+  --camera "$IPHONE" --mic "$LAV" --approx "$APPROX" --window 30 --duration 30)
 OFFSET=$(echo "$OFFSET_JSON" | grep -oE '"offset":\s*-?[0-9.]+' | grep -oE '\-?[0-9.]+')
 CONF=$(echo "$OFFSET_JSON" | grep -oE '"confidence":\s*[0-9.]+' | grep -oE '[0-9.]+$')
 echo "[sync] offset=$OFFSET confidence=$CONF"
