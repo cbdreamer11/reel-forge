@@ -1,0 +1,21 @@
+# config.txt — one piece. Written per clip, consumed by take_selector.py
+# then build_reel.py. Plain text on purpose: edit timestamps by hand freely.
+
+piece_num: 01
+section: SECTION_TAG          # your own taxonomy; shown on generated cover cards
+title: The exact title of this piece
+source: /tmp/piece-01/synced.mov
+
+# Candidate ranges, START:END in seconds with 2 decimals.
+#
+# RULES (full version in reference/take-selection.md):
+#   · One take per idea. Never bridge audio across takes.
+#   · 2-4 versions of the same line → the LAST is usually right,
+#     unless one matches the intended wording and the others paraphrase.
+#   · A 30-60s piece is 2-4 segments. 15+ means you are over-cutting.
+#   · INCLUDE THE HOOK EXPLICITLY. The selector never looks outside
+#     the ranges listed here — and people routinely deliver the hook
+#     before the first detected burst.
+segments:
+  - 30.00:69.62
+  - 74.10:88.45

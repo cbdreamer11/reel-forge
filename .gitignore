@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+reelforge.json
+/tmp/
+*.mp4
+*.mov
+*.wav
+*.png
+!templates/*.png
+.DS_Store

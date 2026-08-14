@@ -1,0 +1,36 @@
+{
+  "_readme": [
+    "Example format for `caption_fixes` in your profile.json.",
+    "",
+    "reel-forge ships with an EMPTY fix list on purpose. Mishearings depend on your",
+    "language, your accent and your vocabulary — somebody else's list is noise in",
+    "your captions, and can corrupt words you actually said.",
+    "",
+    "Build yours one entry at a time: every render where whisper mangles a word,",
+    "add the pair. After a dozen pieces the list stops growing.",
+    "",
+    "Each entry is [regex_pattern, replacement]. Backslashes are doubled because",
+    "this is JSON. The patterns run in order, after any global fixes."
+  ],
+
+  "caption_fixes": [
+    ["\\bteh\\b", "the"],
+    ["\\bmy compny\\b", "My Company"],
+    ["\\bkpis?\\b(?<![A-Z])", "KPI"]
+  ],
+
+  "_patterns_that_earn_their_place": [
+    "Proper nouns: your name, your company, your product, people you mention often.",
+    "Field jargon: the terms whisper has never seen in your domain.",
+    "Acronyms: models lowercase them or spell them phonetically.",
+    "Accents and diacritics dropped by the model in your language.",
+    "Homophones the model resolves the wrong way in your usual context."
+  ],
+
+  "_cautions": [
+    "Anchor with \\b so you do not rewrite the inside of longer words.",
+    "Prefer a longer, more specific pattern over a short greedy one.",
+    "A fix that needs surrounding context to be correct is a fix that will",
+    "eventually corrupt a line — leave those for manual review instead."
+  ]
+}

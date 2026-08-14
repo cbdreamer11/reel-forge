@@ -1,0 +1,35 @@
+{
+  "profile_id": "my-profile",
+  "name": "My Show",
+  "person_name": "Jane Doe",
+  "handle": "@janedoe",
+  "email": "hi@example.com",
+  "website": "example.com",
+
+  "colors": {
+    "background": "#111111",
+    "text": "#FAFAFA",
+    "accent": "#4C8DFF",
+    "_comment": "accent does double duty: card highlights AND the caption highlight word. Pick something readable over your footage, not just over the card."
+  },
+
+  "typography": {
+    "sans": "Inter",
+    "serif": "Playfair Display",
+    "_comment": "serif for titles, sans for tags and captions"
+  },
+
+  "logos": {
+    "primary": "",
+    "vertical": "",
+    "_comment": "paths relative to this file. Leave empty to omit the logo entirely."
+  },
+
+  "sections": ["SECTION_A", "SECTION_B"],
+
+  "caption_fixes": [
+    ["\\bkpis?\\b(?<![A-Z])", "KPI"],
+    ["\\bmy compny\\b", "My Company"]
+  ],
+  "_caption_fixes_comment": "[regex, replacement] pairs for words whisper reliably mangles: your field's jargon, proper nouns, product names. Add one each time you catch one in a render. After a dozen pieces the list stops growing."
+}
