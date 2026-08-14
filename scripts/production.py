@@ -414,6 +414,177 @@ def cmd_vocab(cfg, args):
     return 0
 
 
+# ── match ─────────────────────────────────────────────────────────────────
+
+VIDEO_EXT = {".mov", ".mp4", ".m4v", ".avi", ".mkv"}
+
+
+def jaccard(a, b):
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
+
+
+def bigrams(seq):
+    return set(zip(seq[:-1], seq[1:])) if len(seq) > 1 else set()
+
+
+def score_text(said, planned):
+    """How much does what was actually said look like this planned piece?
+
+    Deliberately loose. Nobody delivers their script verbatim — they paraphrase,
+    reorder and improvise. Word overlap plus bigram overlap tolerates that while
+    still separating one piece from 89 others.
+    """
+    a, b = [norm(t) for t in toks(said)], [norm(t) for t in toks(planned)]
+    if not a or not b:
+        return 0.0
+    sa, sb = set(a), set(b)
+    # Containment matters more than symmetric similarity: the spoken take is
+    # long, the planned hook is short. Jaccard alone would punish that.
+    contain = len(sa & sb) / min(len(sa), len(sb))
+    raw = max(jaccard(sa, sb), contain) * 0.7 + jaccard(bigrams(a), bigrams(b)) * 0.3
+
+    # Damp by how much actually overlapped, in absolute terms. Containment is a
+    # ratio, so a three-word utterance sharing two ordinary words scores as high
+    # as a real delivery — a mic check, a slate or a false start would then be
+    # assigned to a piece. Full confidence needs a real handful of shared words.
+    overlap = len(sa & sb)
+    return raw * min(1.0, overlap / 6.0)
+
+
+def transcribe_head(path, seconds, lang, model, cache_dir):
+    """Transcribe the opening of a clip. Cached, so re-running is cheap."""
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    st = Path(path).stat()
+    key = re.sub(r"\W+", "_", Path(path).name) + f"_{int(st.st_mtime)}_{seconds}"
+    cached = cache_dir / (key + ".txt")
+    if cached.exists():
+        return cached.read_text(encoding="utf-8")
+
+    import subprocess
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        wav = Path(td) / "head.wav"
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-nostdin",
+                        "-t", str(seconds), "-i", str(path),
+                        "-vn", "-ar", "16000", "-ac", "1", str(wav)],
+                       check=True)
+        base = Path(td) / "out"
+        subprocess.run(["whisper-cli", "-m", str(model), "-l", lang, "-np",
+                        "-oj", "-of", str(base), "-f", str(wav)],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        data = json.loads((base.with_suffix(".json")).read_text(encoding="utf-8"))
+    text = " ".join((s.get("text") or "").strip()
+                    for s in data.get("transcription", [])
+                    if not (s.get("text", "").strip().startswith("[")))
+    text = re.sub(r"\s+", " ", text).strip()
+    cached.write_text(text, encoding="utf-8")
+    return text
+
+
+def cmd_match(cfg, args):
+    """Figure out which planned piece each recorded clip is, by listening to it."""
+    import shutil as _sh
+    pj = cfg.pieces_json()
+    if not pj.exists():
+        print(f"No {pj.name}. Run: production.py import")
+        return 1
+    doc = json.loads(pj.read_text(encoding="utf-8"))
+    pieces = doc.get("pieces", [])
+
+    root = cfg.roots().get("footage")
+    if not root or not root.path:
+        print(f"{R}No footage path set.{X} Add roots.footage to {cfg.path.name} "
+              f"(or re-run scripts/setup.py).")
+        return 1
+    if not root.path.exists():
+        print(f"{R}Footage folder does not exist:{X} {root.path}")
+        return 1
+
+    for tool in ("ffmpeg", "whisper-cli"):
+        if not _sh.which(tool):
+            print(f"{R}{tool} not found.{X} Run: ./scripts/doctor.sh --install")
+            return 1
+
+    clips = sorted(p for p in root.path.rglob("*")
+                   if p.suffix.lower() in VIDEO_EXT and not p.name.startswith("."))
+    if not clips:
+        print(f"No video files under {root.path}")
+        return 0
+
+    model = Path(expand(os.environ.get(
+        "WHISPER_MODEL", str(Path.home() / "whisper-models" / "ggml-base.bin"))))
+    if not model.exists():
+        print(f"{R}Whisper model not found:{X} {model}")
+        return 1
+
+    lang = (cfg.language or "auto")[:2] or "auto"
+    cache = cfg.dir / ".transcript-cache"
+    fields = args.fields.split(",")
+
+    print(f"{B}Matching {len(clips)} clip(s) against {len(pieces)} planned piece(s){X}")
+    print(f"{D}  listening to the first {args.seconds}s of each clip{X}\n")
+
+    taken = {p["clip"] for p in pieces if p.get("clip")}
+    assigned = ambiguous = unmatched = 0
+
+    for clip in clips:
+        if str(clip) in taken and not args.reassign:
+            continue
+        try:
+            said = transcribe_head(clip, args.seconds, lang, model, cache)
+        except Exception as e:
+            print(f"  {R}✗{X} {clip.name}: could not transcribe ({e})")
+            unmatched += 1
+            continue
+        if not said:
+            print(f"  {Y}!{X} {clip.name}: no speech in the first {args.seconds}s")
+            unmatched += 1
+            continue
+
+        scored = sorted(
+            ((score_text(said, " ".join(str(p.get(f, "")) for f in fields)), p)
+             for p in pieces),
+            key=lambda t: t[0], reverse=True)
+        best_s, best = scored[0]
+        second_s = scored[1][0] if len(scored) > 1 else 0.0
+
+        # Two guards, because a wrong assignment is worse than no assignment:
+        # the match must be good enough on its own AND clearly beat the runner-up.
+        if best_s < args.min_score:
+            print(f"  {Y}?{X} {clip.name}: no confident match "
+                  f"(best #{best['num']} at {best_s:.2f})")
+            print(f"{D}      said: {said[:80]}…{X}")
+            ambiguous += 1
+            continue
+        if best_s - second_s < args.margin:
+            print(f"  {Y}?{X} {clip.name}: ambiguous between "
+                  f"#{best['num']} ({best_s:.2f}) and #{scored[1][1]['num']} ({second_s:.2f})")
+            ambiguous += 1
+            continue
+
+        best["clip"] = str(clip)
+        if best.get("status") in (None, "", "planned"):
+            best["status"] = "shot"
+        assigned += 1
+        print(f"  {G}✓{X} {clip.name}  →  #{best['num']:03d}  {D}({best_s:.2f}){X}")
+        print(f"{D}      {str(best.get(fields[0], ''))[:78]}{X}")
+
+    if not args.dry_run and assigned:
+        pj.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    print(f"\n{B}assigned {assigned}   ambiguous {ambiguous}   unmatched {unmatched}{X}")
+    if ambiguous:
+        print(f"{D}  Ambiguous ones are left alone on purpose — a wrong mapping edits the{X}")
+        print(f"{D}  wrong piece. Set them by hand in {pj.name}, or lower --min-score.{X}")
+    if args.dry_run:
+        print(f"{D}  --dry-run: nothing written{X}")
+    elif assigned:
+        print(f"{D}  wrote {pj}. Re-run any time — renaming a file just re-matches it.{X}")
+    return 0
+
+
 # ── check ─────────────────────────────────────────────────────────────────
 
 def cmd_check(cfg, args):
@@ -498,6 +669,19 @@ def main():
     p.add_argument("--top", type=int, default=25)
     p.add_argument("--write", default=None, help="write candidates to a JSON file")
 
+    p = sub.add_parser("match", help="identify which planned piece each clip is")
+    p.add_argument("--seconds", type=int, default=30,
+                   help="how much of the clip opening to listen to (default 30)")
+    p.add_argument("--fields", default="hook,message,closing",
+                   help="piece fields to compare the speech against")
+    p.add_argument("--min-score", type=float, default=0.25,
+                   help="below this, no match is claimed (default 0.25)")
+    p.add_argument("--margin", type=float, default=0.06,
+                   help="best must beat runner-up by this much (default 0.06)")
+    p.add_argument("--reassign", action="store_true",
+                   help="also re-match clips already assigned")
+    p.add_argument("--dry-run", action="store_true")
+
     sub.add_parser("check", help="preflight: paths, drives, what is missing")
 
     args = ap.parse_args()
@@ -506,7 +690,8 @@ def main():
     except FileNotFoundError as e:
         print(e)
         return 1
-    return {"import": cmd_import, "vocab": cmd_vocab, "check": cmd_check}[args.cmd](cfg, args)
+    return {"import": cmd_import, "vocab": cmd_vocab,
+            "match": cmd_match, "check": cmd_check}[args.cmd](cfg, args)
 
 
 if __name__ == "__main__":

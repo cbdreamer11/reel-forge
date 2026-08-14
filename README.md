@@ -97,6 +97,31 @@ but exactly one appears per piece. Judging by any single word's frequency would 
 and cuts the list at the frequency cliff, because at threshold 1 one ordinary word is
 enough to mistake a body take for the closing.
 
+### Matching clips to pieces by listening to them
+
+```bash
+python3 scripts/production.py match
+```
+
+Name your files however you like. `match` transcribes the first 30 seconds of each
+clip and compares it against every planned piece, so the mapping comes from **what
+you actually said**, not from a filename you have to keep straight on a shoot day.
+
+It tolerates paraphrase, because nobody delivers their script verbatim:
+
+```
+✓ C0042.MOV  →  #042  (0.68)
+✓ C0043.MOV  →  #051  (0.68)
+? C0044.MOV: ambiguous between #12 (0.41) and #37 (0.38)
+```
+
+Two guards, because a wrong mapping edits the wrong piece: the match must clear an
+absolute score **and** clearly beat the runner-up. Anything short of that is left
+alone for you to set by hand — it refuses rather than guesses. Mic checks, slates and
+false starts score near zero and are skipped.
+
+Re-run it any time; results are cached per file, and renaming a clip just re-matches it.
+
 ### Paths that survive an unplugged drive
 
 Video lives on external disks, and external disks are not always mounted. Every root

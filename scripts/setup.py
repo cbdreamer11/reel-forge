@@ -142,8 +142,42 @@ def main():
                         default=old_p.get("language", "es")),
     }
 
-    # ── 2. footage ────────────────────────────────────────────────────────
-    head("2. Where is your footage?")
+    # ── 2. content list ───────────────────────────────────────────────────
+    head("2. Do you work from a script or a list?")
+    note("A list of planned pieces — titles, hooks, scripts. Wherever you already")
+    note("keep it. Two things come out of it, and both are worth the question:")
+    note("  · the word lists that sharpen take selection, derived before you shoot")
+    note("  · matching each recorded clip to its piece by listening to it, so you")
+    note("    never have to name files carefully or track which take was which")
+    old_cl = old.get("content_list", {}) or {}
+    if ask_yes("Do you have one?", default=bool(old_cl.get("path"))):
+        cl = {"path": ask_dir("List file", default=old_cl.get("path", ""),
+                              allow_empty=True)}
+        if cl["path"]:
+            ext = Path(cl["path"]).suffix.lower()
+            guess = {".html": "html_table", ".htm": "html_table", ".csv": "csv",
+                     ".json": "json", ".md": "markdown_table"}.get(ext, "html_table")
+            cl["format"] = ask("Format (html_table / csv / json / markdown_table)",
+                               default=old_cl.get("format", guess))
+            note("Which column holds what. Indices are 0-based; for json, use key names.")
+            note("Leave a field blank if your list does not have it.")
+            old_cols = old_cl.get("columns", {}) or {}
+            cols = {}
+            for field, label in (("num", "piece number"), ("type", "type/category"),
+                                 ("hook", "hook or title"), ("message", "body/script"),
+                                 ("closing", "closing line or CTA")):
+                v = ask(f"  column for {label}", default=str(old_cols.get(field, "")))
+                if str(v).strip() != "":
+                    cols[field] = int(v) if str(v).strip().lstrip("-").isdigit() else v
+            cl["columns"] = cols
+            cfg["content_list"] = cl
+            note("After setup:  production.py import  →  vocab  →  (shoot)  →  match")
+    else:
+        note("Fine — the editor works per-clip without it. Add `content_list` to")
+        note("reelforge.json later and re-run this to enable list features.")
+
+    # ── 3. footage ────────────────────────────────────────────────────────
+    head("3. Where is your footage?")
     note("The folder holding the raw camera files. Subfolders are searched too.")
     old_s = old.get("sources", {})
     video_dir = ask_dir("Video folder", default=old_s.get("video_dir") or str(proj / "raw"))
@@ -151,7 +185,7 @@ def main():
     print(f"{GREEN}    found {n_vid} video file(s){RESET}" if n_vid
           else f"{YELLOW}    no video files found yet — that's fine, add them later{RESET}")
 
-    head("3. Audio")
+    head("4. Audio")
     separate = ask_yes(
         "Did you record audio separately (lavalier, field recorder, podcast mic)?",
         default=bool(old_s.get("audio_separate", False)))
@@ -178,8 +212,8 @@ def main():
         "sync_hint_sec": sync_hint,
     }
 
-    # ── 4. music ──────────────────────────────────────────────────────────
-    head("4. Background music")
+    # ── 5. music ──────────────────────────────────────────────────────────
+    head("5. Background music")
     old_m = old.get("music", {})
     use_music = ask_yes("Do your videos carry background music?",
                         default=bool(old_m.get("enabled", False)))
@@ -193,8 +227,8 @@ def main():
                                      default=str(old_m.get("duck_db", -18))) or -18)
     cfg["music"] = music
 
-    # ── 5. intro / outro ──────────────────────────────────────────────────
-    head("5. Intro and outro")
+    # ── 6. intro / outro ──────────────────────────────────────────────────
+    head("6. Intro and outro")
     old_b = old.get("branding", {})
     mode = ask_choice(
         "How should the intro/outro be made?",
@@ -250,7 +284,7 @@ def main():
         }
     cfg["branding"] = branding
 
-    # ── 6. editing defaults ───────────────────────────────────────────────
+    # ── 7. editing defaults ───────────────────────────────────────────────
     cfg["editing"] = old.get("editing", {
         "padding_head_sec": 0.05,
         "padding_tail_sec": 0.10,

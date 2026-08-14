@@ -46,12 +46,17 @@ If `reelforge.json` has a `content_list`, this project is a series, not a one-of
 python3 scripts/production.py check     # always safe; run it first
 python3 scripts/production.py import    # list -> pieces.json
 python3 scripts/production.py vocab     # derive hook/closing word lists
+python3 scripts/production.py match    # identify each clip by listening to it
 ```
 
 **Run `vocab` before the user shoots anything.** The two lists that make take
 selection sharp are already latent in their plan, and word lists carried over from a
 previous cycle are worse than none — they consolidate the wrong takes. Paste the
 result into `take_selector`, after the user prunes it.
+
+**Use `match` instead of asking the user which clip is which.** It transcribes each
+clip's opening and compares it to the planned pieces, tolerating paraphrase. It
+refuses rather than guesses when two pieces are close — leave those for the user.
 
 `check` is also the right first move whenever a path looks wrong: it reports unmounted
 drives and unset roots as *pending*, not failures.
