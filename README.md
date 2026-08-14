@@ -26,6 +26,18 @@ it is the part of this repo worth reading even if you never run the code.
 
 ---
 
+## Before you record
+
+Read this first — it costs nothing on set and changes the result a lot:
+**[How to record](reference/recording.md)** · **[Cómo grabar](reference/grabacion.md)**
+
+The headline: **don't stop the recording, just do the take again.** The selector
+compares takes *inside one file*. Four attempts in one recording means it sees all
+four and keeps the best on its own; four separate files means it never compares them
+and you pick by hand. One recording with four takes beats four recordings with one.
+
+---
+
 ## Install
 
 ```bash

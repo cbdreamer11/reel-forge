@@ -58,6 +58,13 @@ result into `take_selector`, after the user prunes it.
 clip's opening and compares it to the planned pieces, tolerating paraphrase. It
 refuses rather than guesses when two pieces are close — leave those for the user.
 
+**If the user has not shot anything yet, point them at
+`reference/recording.md` (or `reference/grabacion.md` in Spanish).** The single
+highest-leverage habit is to keep the camera rolling and repeat the take instead of
+cutting: the selector only compares takes within one file, so four attempts in one
+recording get chosen automatically, while four separate files cannot be compared at
+all. Say that one out loud even if they skip the rest.
+
 `check` is also the right first move whenever a path looks wrong: it reports unmounted
 drives and unset roots as *pending*, not failures.
 
