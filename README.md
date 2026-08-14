@@ -54,6 +54,67 @@ let you approve the take selection before rendering.
 
 ---
 
+## The production layer
+
+An editor cuts one clip. A series needs to know what pieces exist, which are shot,
+and where the files are. That list already exists somewhere — a spreadsheet, an HTML
+dashboard, a Notion export. reel-forge reads it instead of asking you to retype it.
+
+```bash
+python3 scripts/production.py import   # your list -> pieces.json
+python3 scripts/production.py vocab    # derive the word lists from that list
+python3 scripts/production.py check    # preflight: paths, drives, what's missing
+```
+
+Point it at whatever you already keep — `html_table`, `csv`, `json` or
+`markdown_table`, with the column mapping in config:
+
+```json
+"content_list": {
+  "path": "~/plan/season-one.html",
+  "format": "html_table",
+  "columns": { "num": 0, "type": 1, "hook": 2, "message": 3, "closing": 4 }
+}
+```
+
+**`vocab` is the useful part, and it works before you shoot anything.** The two word
+lists that make take selection sharp — how you open, how you close — are already
+latent in your own plan. It reads them out and tells you the threshold to use:
+
+```
+closing theme words  (field 'closing', ≥3 of 90)
+    30×  comment
+    30×  save
+    29×  share
+
+suggested min_theme_matches: 1
+  top words cover 99% of closings, typically 1 hit(s) each.
+```
+
+That series splits its call-to-action by content type, so no single word is frequent —
+but exactly one appears per piece. Judging by any single word's frequency would say
+"3" and the pass would then never fire. It measures the coverage of the group instead,
+and cuts the list at the frequency cliff, because at threshold 1 one ordinary word is
+enough to mistake a body take for the closing.
+
+### Paths that survive an unplugged drive
+
+Video lives on external disks, and external disks are not always mounted. Every root
+takes a `primary` and a `fallback`:
+
+```json
+"roots": {
+  "footage": { "primary": "/Volumes/Rig/footage", "fallback": "~/Movies/footage" },
+  "output":  { "primary": "/Volumes/Rig/out",     "fallback": "~/Movies/out" }
+}
+```
+
+`check` reports the degradation loudly instead of failing later with a confusing
+error. An unset path is *pending*, not an error — so `check` runs on day zero and
+tells you exactly what is left to fill in.
+
+---
+
 ## Requirements
 
 - macOS or Linux (auto-install targets macOS/Homebrew)

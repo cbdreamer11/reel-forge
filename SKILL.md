@@ -38,6 +38,26 @@ Check for `reelforge.json` in the project directory.
 
 ---
 
+## 0.5 Is there a content list?
+
+If `reelforge.json` has a `content_list`, this project is a series, not a one-off.
+
+```bash
+python3 scripts/production.py check     # always safe; run it first
+python3 scripts/production.py import    # list -> pieces.json
+python3 scripts/production.py vocab     # derive hook/closing word lists
+```
+
+**Run `vocab` before the user shoots anything.** The two lists that make take
+selection sharp are already latent in their plan, and word lists carried over from a
+previous cycle are worse than none — they consolidate the wrong takes. Paste the
+result into `take_selector`, after the user prunes it.
+
+`check` is also the right first move whenever a path looks wrong: it reports unmounted
+drives and unset roots as *pending*, not failures.
+
+---
+
 ## 1. Sync and mux
 
 If `sources.audio_separate` is false, skip this — the camera audio is the audio.
