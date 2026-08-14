@@ -32,7 +32,11 @@ Check for `reelforge.json` in the project directory.
    footage is, whether audio was recorded separately, whether there is music, and
    how the intro/outro should be built. It is interactive — **tell the user to run
    it in their terminal** rather than trying to answer for them.
-3. Read the resulting `reelforge.json` before doing anything else.
+3. **Verify the pipeline runs**: `./scripts/smoke-test.sh`. It builds a synthetic
+   clip and renders it end to end, so a broken install is caught before the user's
+   own footage is involved. Never debug someone's first real render without having
+   confirmed the pipeline works at all.
+4. Read the resulting `reelforge.json` before doing anything else.
 
 **If it exists**, read it and proceed to §1.
 

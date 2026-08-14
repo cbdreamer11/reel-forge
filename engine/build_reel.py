@@ -40,7 +40,7 @@ from pathlib import Path
 LANG = os.environ.get("REELFORGE_LANG", "auto")
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 TOOL_DIR = Path(__file__).resolve().parent
 # WHISPER_MODEL override-able via env var (use medium when low memory)
 WHISPER_MODEL = Path(os.path.expanduser(os.environ.get(
@@ -168,9 +168,22 @@ def parse_config(path):
             if ":" in line:
                 k, _, v = line.partition(":")
                 cfg[k.strip()] = v.strip()
-    for k in ("reel_num", "section", "title", "brand", "source"):
-        if k not in cfg:
-            raise ValueError(f"config missing required key: {k}")
+    # `piece_num` is the documented name; `reel_num` is accepted as an alias so
+    # older configs keep working. Downstream code reads reel_num.
+    if "reel_num" not in cfg and "piece_num" in cfg:
+        cfg["reel_num"] = cfg["piece_num"]
+    cfg.setdefault("piece_num", cfg.get("reel_num", ""))
+
+    for k in ("reel_num", "section", "title", "source"):
+        if k not in cfg or cfg[k] == "":
+            hint = " (or reel_num)" if k == "reel_num" else ""
+            raise ValueError(f"config missing required key: {k}{hint}")
+
+    # A profile is optional: without one the render uses built-in defaults and
+    # skips the generated cards. Requiring it would block anyone who has not set
+    # up branding yet, which is the recommended way to start.
+    cfg.setdefault("brand", "")
+
     if not cfg["segments"]:
         raise ValueError("config: no segments listed")
     return cfg
@@ -184,19 +197,40 @@ def slugify(text):
 
 
 def parse_segment(seg):
-    """`HH:MM:SS.s:HH:MM:SS.s` -> (start, end)"""
-    # split at the middle colon (need 6 colon-separated parts since each ts has 2)
-    parts = seg.split(":")
-    if len(parts) != 6:
-        # allow flexible: split on " "/"-"
-        for sep in (" - ", "-", " "):
-            if sep in seg:
-                a, _, b = seg.partition(sep)
+    """Parse one segment range into (start, end) timestamps.
+
+    Accepts, because people write ranges all of these ways:
+        30.00:69.62                  plain seconds  (documented form)
+        00:00:30.0:00:01:09.6        HH:MM:SS on both sides
+        01:30.5:02:10.0              MM:SS on both sides
+        30.00 - 69.62  /  30.00-69.62  /  30.00 69.62
+    """
+    seg = seg.strip()
+
+    # Explicit separators first — unambiguous when present.
+    for sep in (" - ", " – ", "--", " "):
+        if sep in seg:
+            a, _, b = seg.partition(sep)
+            if a.strip() and b.strip():
                 return a.strip(), b.strip()
-        raise ValueError(f"bad segment format: {seg!r}")
-    start = ":".join(parts[0:3])
-    end = ":".join(parts[3:6])
-    return start, end
+
+    parts = seg.split(":")
+    if len(parts) == 2:                 # 30.00:69.62
+        return parts[0].strip(), parts[1].strip()
+    if len(parts) == 4:                 # MM:SS:MM:SS
+        return ":".join(parts[0:2]), ":".join(parts[2:4])
+    if len(parts) == 6:                 # HH:MM:SS:HH:MM:SS
+        return ":".join(parts[0:3]), ":".join(parts[3:6])
+
+    # Bare hyphen last: timestamps rarely contain one, but negative offsets do.
+    if "-" in seg:
+        a, _, b = seg.partition("-")
+        if a.strip() and b.strip():
+            return a.strip(), b.strip()
+
+    raise ValueError(
+        f"bad segment format: {seg!r}. Use START:END in seconds (e.g. 30.00:69.62), "
+        f"HH:MM:SS on both sides, or START - END.")
 
 
 def ts_to_sec(ts):
@@ -451,6 +485,8 @@ def main():
     p.add_argument("--config", required=True)
     p.add_argument("--workdir", default=None,
                    help="Working directory (default: ./build_<reel_num>)")
+    p.add_argument("--output-dir", default=None,
+                   help="where the finished file goes (default: <config dir>/out)")
     p.add_argument("--keep", action="store_true",
                    help="Keep working files after success")
     args = p.parse_args()
@@ -508,17 +544,22 @@ def main():
         "--brand", cfg["brand"],
     ])
 
-    # 6. Cards PNG
+    # 6. Cards PNG — only when a profile exists. With no branding configured
+    # there is nothing to draw on a card, and "start with no intro" is the
+    # recommended way to begin, so this step is skipped rather than failed.
     cover_png = work / "cover.png"
     outro_png = work / "outro.png"
-    run([
-        sys.executable, str(TOOL_DIR / "make_cards.py"),
-        "--brand", cfg["brand"],
-        "--section", cfg["section"],
-        "--title", cfg["title"],
-        "--out-cover", str(cover_png),
-        "--out-outro", str(outro_png),
-    ])
+    if cfg["brand"]:
+        run([
+            sys.executable, str(TOOL_DIR / "make_cards.py"),
+            "--brand", cfg["brand"],
+            "--section", cfg["section"],
+            "--title", cfg["title"],
+            "--out-cover", str(cover_png),
+            "--out-outro", str(outro_png),
+        ])
+    else:
+        print("[build_reel] no profile set — skipping cover/outro cards")
 
     # 7. PNG -> MP4. Edit-layer no longer prepends a placeholder cover or
     # appends a placeholder outro — premium (branding layer) provides
@@ -549,9 +590,18 @@ def main():
 
     # 9. Final = body_cap (no placeholder cover/outro). Premium handles wrap.
     slug = slugify(cfg["title"])
-    out_dir = REPO_ROOT / "brands" / cfg["brand"] / "content" / "ready"
+    # Where the finished file goes, in priority order. Never inside the repo:
+    # writing output into the tool's own directory pollutes a clone and ignores
+    # wherever the user actually keeps their footage.
+    if args.output_dir:
+        out_dir = Path(os.path.expanduser(args.output_dir))
+    elif os.environ.get("REELFORGE_OUTPUT_DIR"):
+        out_dir = Path(os.path.expanduser(os.environ["REELFORGE_OUTPUT_DIR"]))
+    else:
+        # Beside the config being built — predictable, and inside the user's project.
+        out_dir = Path(args.config).resolve().parent / "out"
     out_dir.mkdir(parents=True, exist_ok=True)
-    final = out_dir / f"Reel_{cfg['reel_num']}_{cfg['section']}_{slug}.mp4"
+    final = out_dir / f"{cfg['reel_num']}_{cfg['section']}_{slug}.mp4"
     shutil.copy(body_cap, final)
 
     print(f"\nDONE: {final}")

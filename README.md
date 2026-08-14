@@ -49,6 +49,17 @@ cd reel-forge
 `doctor.sh` checks and installs ffmpeg, whisper.cpp, the whisper models, the Python
 packages and the fonts. It prompts before each install; `--yes` skips the prompts.
 
+Verify it actually works before you shoot anything:
+
+```bash
+./scripts/smoke-test.sh          # or: ./scripts/smoke-test.sh es
+```
+
+It synthesises a short talking-head clip with the system speech voice — a flubbed
+line then a clean retry, a closing said three times — and runs the real pipeline over
+it. Exit 0 means detection, per-burst transcription, take selection, captions, zoom
+and the render all work on your machine. Add `--keep` to watch the result.
+
 Then, once per project:
 
 ```bash

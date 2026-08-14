@@ -20,12 +20,13 @@ Algorithm:
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 SPANISH_STOPWORDS = {
@@ -105,19 +106,64 @@ def fmt_ts(t):
     return f"{h:d}:{m:02d}:{s:05.2f}"
 
 
+# Used when no profile is configured. Rendering must work with zero branding,
+# because "start with no intro" is the recommended way to begin — requiring a
+# profile would make the documented first run impossible.
+DEFAULT_PROFILE = {
+    "profile_id": "default",
+    "name": "",
+    "colors": {"background": "#111111", "text": "#FAFAFA", "accent": "#4C8DFF"},
+    "typography": {"sans": "Inter", "serif": "Playfair Display"},
+}
+
+
+def profile_dirs(brand_id):
+    """Where a profile may live, in priority order. Configurable, never assumed."""
+    out = []
+    env = os.environ.get("REELFORGE_PROFILE_DIR")
+    if env:
+        out.append(Path(os.path.expanduser(env)))
+    for base in (Path.cwd(), REPO_ROOT):
+        out.append(base / "profiles" / brand_id)
+        out.append(base / "brands" / brand_id)
+    return out
+
+
 def load_brand(brand_id):
-    path = REPO_ROOT / "brands" / brand_id / "brand.json"
-    if not path.exists():
-        raise FileNotFoundError(f"brand.json not found at {path}")
-    with open(path) as f:
-        return json.load(f)
+    """Load a profile, or fall back to neutral defaults.
+
+    A missing profile is not an error: it means the user has not set up branding
+    yet, which is both common and recommended for a first render.
+    """
+    if not brand_id:
+        return dict(DEFAULT_PROFILE)
+    for d in profile_dirs(brand_id):
+        for name in ("profile.json", "brand.json"):
+            p = d / name
+            if p.exists():
+                with open(p) as f:
+                    return json.load(f)
+    print(f"[make_captions] no profile '{brand_id}' found; using defaults",
+          file=sys.stderr)
+    return dict(DEFAULT_PROFILE)
 
 
 def load_accent_words(path_or_none, brand_id):
+    """Optional word list that always gets the accent color. Absent is fine —
+    the renderer then picks accent words by length, as it does by default."""
     if path_or_none:
         p = Path(path_or_none)
+    elif brand_id:
+        p = None
+        for d in profile_dirs(brand_id):
+            cand = d / "memory" / "caption_accent_words.json"
+            if cand.exists():
+                p = cand
+                break
+        if p is None:
+            return set()
     else:
-        p = REPO_ROOT / "brands" / brand_id / "memory" / "caption_accent_words.json"
+        return set()
     if not p.exists():
         return set()
     with open(p) as f:
